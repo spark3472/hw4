@@ -1,0 +1,6 @@
+#include <stdio.h>
+#include "userthread.h"
+
+int main(){
+  printf("run\n");
+}
