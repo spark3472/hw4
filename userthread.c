@@ -31,8 +31,8 @@ struct thread_queue{
  
 };
 
-/* Makes a new job list
- * @return the initiated joblist
+/* Makes a new thread_queue
+ * @return 0 for success, -1 for failure
  */
 //global queue
 struct thread_queue* global;
@@ -40,19 +40,20 @@ int thread_libinit(int policy) {
     global = malloc(1 * sizeof(struct thread_queue));
     global->length = 0;
     global->head = NULL;
-    //newjobList->jobsTotal = 0;
+
     return 0;
+
 }
 
-/* Frees a process
- * @param process The process to free
+/* Frees a thread
+ * @param thread to free
 */
 void free_thread(mythread* thread) {
   free(thread);
 }
 
-/* Goes through the joblist and frees each node
- * @param node The node of the joblist to free
+/* Goes through the queue and frees each node
+ * @param node The node of the queue to free
  */
 void free_next(mythread* node) {
     if(node == NULL) {
@@ -62,8 +63,8 @@ void free_next(mythread* node) {
     free_thread(node);
 }
 
-/* Frees the joblist, including calling freeHelper to free individual processes
- * @param jobList the jobList to free
+/* Frees the the queue
+ * @param queue to free
  */
 void free_thread_queue(struct thread_queue* global) {
     free_next(global->head);
@@ -76,12 +77,21 @@ int thread_libterminate(void)
 
   return -1;
 }
+
+/* https://stackoverflow.com/questions/60591497/how-can-i-mask-the-warning-from-makecontext-if-the-function-passed-in-has-parame
+ * Work around to makecontext argument type error
+ * @param function to execute
+ * @param arguments to pass into function to execute
+ */
 typedef void (* ucfunc_t)(void);
 void helper(void* (*selectFunction)(void*), void* selectArg) {
     // Calls select function with select argument
     selectFunction(selectArg);
 }
 
+/* Adds recently initialized thread to queue
+ * @param thread to add
+ */
 sem_t global_mutex;
 int add_thread(mythread *new_thread){
 
@@ -108,7 +118,11 @@ int add_thread(mythread *new_thread){
     sem_post(&global_mutex);
 }
 
-
+/* initializes thread and calls add_thread to add it to queue
+ * @param function for thread to execute
+ * @param argument to pass into function for thread to execute
+ * @param priority number (-1, 0, or 1) not applicable if policy = FIFO or SJF
+ */
 int thread_create(void (*func)(void *), void *arg, int priority)
 {
     //initializing a context
@@ -156,6 +170,9 @@ int thread_create(void (*func)(void *), void *arg, int priority)
 
 }
 
+/* Test a function of makecontext
+ * @param argument that is passed in from thread
+ */
 void doThing(void* arg)
 {
  printf("%s thing done\n", (char*)arg);
