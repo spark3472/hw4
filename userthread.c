@@ -21,9 +21,11 @@
 #define STACKSIZE (256*1024)
 
 int id = 0;
+ucontext_t ma; //for main function
 
 //holds the thread_queue struct
-struct thread_queue{
+struct thread_queue
+{
   //first thread
   mythread *head; ;
   
@@ -36,26 +38,68 @@ struct thread_queue{
  */
 //global queue
 struct thread_queue* global;
-int thread_libinit(int policy) {
+int thread_libinit(int policy) 
+{
+
+    if (policy == FIFO)
+    {
+      //threads on the ready queue are to be scheduled as they arrive
+
+
+      return 0;
+
+    }else if (policy == SJF)
+    {
+
+      //no runtime history use half the quanta
+
+      //threads on the ready queue are to be scheduled shortest job first with
+      //according to estimated time (keep track of how long thread runs before 
+      //calling thread_yield or thread_join) use average of the last three 
+      //times it took for the thread ran to compute job time. When a job is
+      //created, assume its an average job and set its runtime to the average
+      //runtime of all threads so far
+
+      
+      return 0;
+
+    }else if (policy == PRIORITY)
+    {
+      
+      //level -1: 1.5x more than level 0
+      //level 0: 1.5x more than level 1
+
+      //schedule a SIGARLM to send to scheduler every 100 milliseconds
+      //see lab ucontext-hw.c
+      //refer to setitimer(2)
+
+      return 0;
+
+    }else{
+      
+
+      return -1;
+    }
+
     global = malloc(1 * sizeof(struct thread_queue));
     global->length = 0;
     global->head = NULL;
-
-    return 0;
 
 }
 
 /* Frees a thread
  * @param thread to free
 */
-void free_thread(mythread* thread) {
-  free(thread);
+void free_thread(mythread* thread) 
+{
+    free(thread);
 }
 
 /* Goes through the queue and frees each node
  * @param node The node of the queue to free
  */
-void free_next(mythread* node) {
+void free_next(mythread* node) 
+{
     if(node == NULL) {
         return;
     }
@@ -66,7 +110,8 @@ void free_next(mythread* node) {
 /* Frees the the queue
  * @param queue to free
  */
-void free_thread_queue(struct thread_queue* global) {
+void free_thread_queue(struct thread_queue* global) 
+{
     free_next(global->head);
     free(global);
 }
@@ -84,7 +129,8 @@ int thread_libterminate(void)
  * @param arguments to pass into function to execute
  */
 typedef void (* ucfunc_t)(void);
-void helper(void* (*selectFunction)(void*), void* selectArg) {
+void helper(void* (*selectFunction)(void*), void* selectArg) 
+{
     // Calls select function with select argument
     selectFunction(selectArg);
 }
@@ -93,29 +139,49 @@ void helper(void* (*selectFunction)(void*), void* selectArg) {
  * @param thread to add
  */
 sem_t global_mutex;
-int add_thread(mythread *new_thread){
-
-    sem_wait(&global_mutex);
+int add_thread(mythread *new_thread)
+{
 
     if (global->head == NULL){
 
-      //printf("head is null\n");
+
+      sem_wait(&global_mutex);
+
       global->head = new_thread;
       global->length++;
 
-      return 0;
+      sem_post(&global_mutex);
+
+      if (new_thread->id < 0){
+        return -1;
+      }else{
+        return new_thread->id;
+      }
 
     }else{
 
-      //printf("head is not null\n");
-      global->head->next = new_thread;
+      sem_wait(&global_mutex);
+      mythread *traverse = global->head;
+      
+      while(traverse != NULL && traverse->next != NULL)
+      {
+            traverse = traverse->next;
+      }
+
+
+      traverse->next = new_thread;
       global->length++;
 
-      return 0;
+      sem_post(&global_mutex);
+
+      if (new_thread->id < 0){
+        return -1;
+      }else{
+        return new_thread->id;
+      }
 
     }
 
-    sem_post(&global_mutex);
 }
 
 /* initializes thread and calls add_thread to add it to queue
@@ -131,6 +197,7 @@ int thread_create(void (*func)(void *), void *arg, int priority)
     int context = -1;
     if ((context = getcontext(&new)) == -1)
     {
+      printf("failed to get context\n");
       return -1;
     }
     stack = malloc(STACKSIZE);
@@ -139,33 +206,24 @@ int thread_create(void (*func)(void *), void *arg, int priority)
     new.uc_stack.ss_flags = 0;
     sigemptyset(&(new.uc_sigmask));
     sigaddset(&(new.uc_sigmask), SIGALRM);
-    //printf("ucontext made\n");
+
 
     //initializing a mythread
     mythread *new_thread = malloc(sizeof(mythread));
-    //printf("malloc made\n");
     new_thread->uc = new;
-    //printf("set uc = new made\n");
     new_thread->start_func = func;
-    //printf("func made\n");
     new_thread->args = arg;
-    //printf("args made\n");
     new_thread->id = ++id;
-    //printf("id made\n");
     
-    //Ready to be queued
+    makecontext(&new, (ucfunc_t)helper, 2 , func, arg);
     new_thread->state = READY;
-    //printf("state made\n");
+
     
     new_thread->returnValue = NULL;
-    //printf("returnValue made\n");
     new_thread->blockedForJoin = NULL;
-    //printf("blocked made\n");
     new_thread->next = NULL;
-    makecontext(&new, (ucfunc_t)helper, 2 , func, arg);
-    setcontext(&new);
 
-
+    swapcontext(&ma, &new);
     return (add_thread(new_thread));
 
 }
@@ -175,7 +233,11 @@ int thread_create(void (*func)(void *), void *arg, int priority)
  */
 void doThing(void* arg)
 {
- printf("%s thing done\n", (char*)arg);
+        //work to do
+        printf("%s\n", (char*)arg);
+
+        //set context back to ma
+        setcontext(&ma);
 }
 
 int thread_yield(void)
@@ -190,12 +252,36 @@ int thread_join(int tid)
   return -1;
 }
 
+void print_thread()
+{
+  
+  mythread *pointer = global->head;
+  printf("Length of Queue: %d\n", global->length);
+  for (int i = 0; i < global->length; i++){
+    printf("Thread id : %d\n", pointer->id);
+    pointer = pointer->next;
+  }
+}
 
-int main(){
-  sem_init(&global_mutex, 0, 1);
-  int thread_lib = thread_libinit(1);
-  printf("%d thread library initiated\n", thread_lib);
-  void *arg = "hello";
-  int create = thread_create(doThing, arg, 0);
-  printf("%d\n", create);
+
+int main()
+{
+        sem_init(&global_mutex, 0, 1);
+        
+
+        int thread_lib = thread_libinit(FIFO);
+        if (thread_lib < 0){
+          printf("Policy not chosen!\n");
+          exit(0);
+        }
+
+        void *arg = "hello";
+        int create = 0;
+        for (int i = 0; i < 10; i++){
+          create = thread_create(doThing, arg, 0);
+
+          printf("Thread id: %d\n", create);
+        }
+        print_thread();
+
 }
