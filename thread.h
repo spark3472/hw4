@@ -7,16 +7,18 @@
 #define FAlSE 0
 #define TRUE 1
 
-#define RUNNING 0
-#define READY 1
-#define BLOCKED 2
+#define CREATED 0
+#define SCHEDULED 1
+#define STOPPED 2
 #define FINISHED 3
 
 typedef struct thread
 {
     ucontext_t uc;			
     int state;
-    int id;			
+    int id;	
+    int priority;	
+    int milliseconds_to_run;	
     void (*start_func)(void *); 	
     void *args; 				
     void *returnValue; 		

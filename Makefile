@@ -1,7 +1,8 @@
 main: userthread.c
-	gcc -Wall -fpic -c userthread.c
-	gcc -o libuserthread.so userthread.o -shared
-	gcc -o userthread userthread.c -L. -luserthread -lpthread
+	
+	gcc -g -Wall -fpic -c userthread.c
+	gcc -g -o libuserthread.so userthread.o -shared
+	gcc -g -o userthread userthread.c -L. -luserthread -lpthread
 
 
 clean:
